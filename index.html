@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>호텔 스마트 객실 점검 Pro (397실 · 사진첨부)</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Pretendard / Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- SheetJS (XLSX / CSV 파싱 및 내보내기 지원) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: 'Noto Sans KR', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea, select {
+      user-select: text;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .btn-tap:active {
+      transform: scale(0.96);
+      transition: transform 0.08s ease;
+    }
+  </style>
+</head>
+<body class="text-slate-800 antialiased">
+
+  <div id="app" class="max-w-lg mx-auto min-h-screen bg-slate-50 shadow-2xl flex flex-col relative pb-20 border-x border-slate-200">
+    
+    <!-- 상단 고정 헤더 -->
+    <header class="sticky top-0 z-30 bg-slate-900 text-white px-4 py-3.5 shadow-md flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-bold tracking-tight leading-tight">스마트 객실 점검 Pro</h1>
+          <p class="text-[11px] text-slate-400" id="headerSubtitle">총 397실 가중치 · 사진증빙 관리 시스템</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="saveIndicator" class="text-[11px] bg-slate-800 text-emerald-400 px-2.5 py-1 rounded-full border border-slate-700 font-medium">
+          ● 자동저장됨
+        </span>
+      </div>
+    </header>
+
+    <!-- 토스트 알림 컨테이너 -->
+    <div id="toastContainer" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-sm pointer-events-none flex flex-col gap-2"></div>
+
+    <!-- 커스텀 확인/입력 모달 -->
+    <div id="customModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+      <div class="bg-white rounded-2xl w-full max-w-sm p-5 shadow-2xl border border-slate-100">
+        <h3 id="modalTitle" class="text-lg font-bold text-slate-900 mb-2">알림</h3>
+        <p id="modalMessage" class="text-sm text-slate-600 mb-4 leading-relaxed"></p>
+        <div id="modalExtraInput" class="mb-4 hidden"></div>
+        <div class="flex gap-2 justify-end">
+          <button id="modalCancelBtn" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 btn-tap">취소</button>
+          <button id="modalConfirmBtn" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 btn-tap">확인</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 사진 확대 보기 모달 -->
+    <div id="photoPreviewModal" onclick="closePhotoPreview()" class="fixed inset-0 z-50 bg-black/90 hidden items-center justify-center p-4">
+      <div class="relative max-w-full max-h-full flex flex-col items-center" onclick="event.stopPropagation()">
+        <button onclick="closePhotoPreview()" class="self-end mb-2 px-3 py-1.5 rounded-xl bg-white/15 text-white text-xs font-bold hover:bg-white/25">
+          닫기 ✕
+        </button>
+        <img id="photoPreviewImg" src="" alt="점검 사진 확대보기" class="max-w-full max-h-[78vh] rounded-xl object-contain shadow-2xl" />
+        <p id="photoPreviewCaption" class="text-xs text-slate-300 mt-2.5 font-medium"></p>
+      </div>
+    </div>
+
+    <!-- 숨겨진 파일 입력 (항목별 사진 업로드용) -->
+    <input type="file" id="itemPhotoFileInput" accept="image/*" multiple class="hidden" onchange="handleItemPhotoSelected(event)" />
+
+    <!-- ===================================================================== -->
+    <!-- TAB 1: 대시보드 & 397객실 현황 (Dashboard)                              -->
+    <!-- ===================================================================== -->
+    <main id="view-dashboard" class="flex-1 p-4 space-y-4">
+      
+      <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-4 text-white shadow-lg">
+        <div class="flex justify-between items-start mb-3">
+          <div>
+            <span class="text-xs font-medium text-emerald-400 uppercase tracking-wider">Inspection Overview</span>
+            <h2 class="text-xl font-extrabold mt-0.5">전체 객실 점검 현황</h2>
+          </div>
+          <div class="text-right">
+            <span class="text-2xl font-black text-emerald-400" id="dashProgressPercent">0.0%</span>
+            <p class="text-[11px] text-slate-400" id="dashProgressCount">0 / 397실 완료</p>
+          </div>
+        </div>
+
+        <div class="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden mb-4">
+          <div id="dashProgressBar" class="h-full bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-2 text-center">
+          <div class="bg-white/10 rounded-xl p-2">
+            <div class="text-xs text-slate-300">점검완료</div>
+            <div class="text-base font-bold text-emerald-400 mt-0.5" id="statCompleted">0</div>
+          </div>
+          <div class="bg-white/10 rounded-xl p-2">
+            <div class="text-xs text-slate-300">점검중</div>
+            <div class="text-base font-bold text-amber-400 mt-0.5" id="statInProgress">0</div>
+          </div>
+          <div class="bg-white/10 rounded-xl p-2">
+            <div class="text-xs text-slate-300">미점검</div>
+            <div class="text-base font-bold text-slate-200 mt-0.5" id="statPending">397</div>
+          </div>
+          <div class="bg-rose-500/20 border border-rose-500/30 rounded-xl p-2">
+            <div class="text-xs text-rose-200">긴급보수</div>
+            <div class="text-base font-bold text-rose-400 mt-0.5" id="statUrgent">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 등급별 분포 요약 -->
+      <div class="bg-white rounded-2xl p-3.5 shadow-xs border border-slate-200/80">
+        <div class="flex items-center justify-between mb-2.5">
+          <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">점검 완료 객실 등급 분포</h3>
+          <span class="text-[11px] text-slate-400">평균 <strong id="dashAvgScore" class="text-slate-700">0.00점</strong></span>
+        </div>
+        <div class="grid grid-cols-5 gap-1.5 text-center">
+          <button onclick="setDashFilter('GRADE_A')" class="p-2 rounded-xl bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition">
+            <div class="text-xs font-bold text-emerald-700">A등급</div>
+            <div class="text-sm font-extrabold text-emerald-900 mt-0.5" id="gradeCountA">0</div>
+          </button>
+          <button onclick="setDashFilter('GRADE_B')" class="p-2 rounded-xl bg-blue-50 border border-blue-200 hover:bg-blue-100 transition">
+            <div class="text-xs font-bold text-blue-700">B등급</div>
+            <div class="text-sm font-extrabold text-blue-900 mt-0.5" id="gradeCountB">0</div>
+          </button>
+          <button onclick="setDashFilter('GRADE_C')" class="p-2 rounded-xl bg-amber-50 border border-amber-200 hover:bg-amber-100 transition">
+            <div class="text-xs font-bold text-amber-700">C등급</div>
+            <div class="text-sm font-extrabold text-amber-900 mt-0.5" id="gradeCountC">0</div>
+          </button>
+          <button onclick="setDashFilter('GRADE_D')" class="p-2 rounded-xl bg-orange-50 border border-orange-200 hover:bg-orange-100 transition">
+            <div class="text-xs font-bold text-orange-700">D등급</div>
+            <div class="text-sm font-extrabold text-orange-900 mt-0.5" id="gradeCountD">0</div>
+          </button>
+          <button onclick="setDashFilter('GRADE_E')" class="p-2 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 transition">
+            <div class="text-xs font-bold text-rose-700">E등급</div>
+            <div class="text-sm font-extrabold text-rose-900 mt-0.5" id="gradeCountE">0</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- 검색 & 층별/상태별 필터 바 -->
+      <div class="space-y-2.5">
+        <div class="flex gap-2">
+          <div class="relative flex-1">
+            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="roomSearchInput" placeholder="객실 호수 검색 (예: 1101, 2251)..."
+              class="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
+              oninput="renderRoomGrid()" />
+            <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+              ✕
+            </button>
+          </div>
+          <select id="floorSelect" onchange="renderRoomGrid()" class="bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900">
+            <option value="ALL">전체 층 (1~9F)</option>
+          </select>
+        </div>
+
+        <div class="flex gap-1.5 overflow-x-auto no-scrollbar pb-1" id="filterChips">
+          <button onclick="setDashFilter('ALL')" data-filter="ALL" class="filter-chip px-3 py-1.5 rounded-full text-xs font-bold bg-slate-900 text-white whitespace-nowrap">전체 (397)</button>
+          <button onclick="setDashFilter('COMPLETED')" data-filter="COMPLETED" class="filter-chip px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-slate-600 border border-slate-200 whitespace-nowrap">점검완료</button>
+          <button onclick="setDashFilter('IN_PROGRESS')" data-filter="IN_PROGRESS" class="filter-chip px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-slate-600 border border-slate-200 whitespace-nowrap">점검중</button>
+          <button onclick="setDashFilter('PENDING')" data-filter="PENDING" class="filter-chip px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-slate-600 border border-slate-200 whitespace-nowrap">미점검</button>
+          <button onclick="setDashFilter('URGENT')" data-filter="URGENT" class="filter-chip px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">🚨 E등급/긴급보수</button>
+        </div>
+      </div>
+
+      <div id="roomGridContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5"></div>
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 2: 현장 객실 점검 화면 (Inspection Form)                           -->
+    <!-- ===================================================================== -->
+    <main id="view-inspect" class="flex-1 hidden flex-col">
+      <div class="sticky top-[60px] z-20 bg-white border-b border-slate-200 shadow-xs px-4 py-3">
+        <div class="flex items-center justify-between gap-2 mb-2.5">
+          <div class="flex items-center gap-1.5">
+            <button onclick="navigateRoom(-1)" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold btn-tap" title="이전 객실">
+              ◀
+            </button>
+            <div class="relative">
+              <select id="inspectRoomSelect" onchange="selectRoomForInspect(this.value)"
+                class="appearance-none bg-slate-900 text-white font-extrabold text-base pl-3.5 pr-8 py-1.5 rounded-xl cursor-pointer focus:outline-none">
+              </select>
+              <span class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 text-xs">▼</span>
+            </div>
+            <button onclick="navigateRoom(1)" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold btn-tap" title="다음 객실">
+              ▶
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <div class="text-right">
+              <div class="text-[10px] font-semibold text-slate-400">가중치 종합점수</div>
+              <div class="text-base font-black text-slate-900 leading-none" id="liveTotalScore">0.00점</div>
+            </div>
+            <div id="liveTotalGradeBadge" class="w-10 h-10 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center text-lg font-black shadow-xs">
+              -
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-1.5 text-xs">
+          <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1.5 rounded-lg">
+            <span class="text-slate-500 font-medium">점검일</span>
+            <input type="date" id="inspectDateInput" onchange="updateRoomDate(this.value)" class="bg-transparent font-bold text-slate-800 focus:outline-none text-xs" />
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button onclick="copyPrevRoomStructure()" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 hover:bg-indigo-100 btn-tap" title="직전 객실의 미설치(none) 항목 구조를 복사합니다">
+              구조복사
+            </button>
+            <button onclick="openBulkFillModal()" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 hover:bg-emerald-100 btn-tap" title="미입력된 나머지 항목을 한 번에 채웁니다">
+              일괄입력
+            </button>
+            <button onclick="resetCurrentRoom()" class="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200 btn-tap" title="현재 객실 초기화">
+              초기화
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-5 gap-1 mt-2.5 pt-2 border-t border-slate-100" id="zoneQuickTabs"></div>
+      </div>
+
+      <div id="inspectionChecklistContainer" class="p-4 space-y-4"></div>
+
+      <div class="px-4 pb-6">
+        <div class="bg-slate-900 text-white rounded-2xl p-4 shadow-md">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs text-slate-400">현재 객실 입력 진행률</span>
+            <span class="text-xs font-bold text-emerald-400" id="inspectItemProgressText">0 / 27 항목 완료</span>
+          </div>
+          <div class="w-full h-2 bg-slate-700 rounded-full overflow-hidden mb-3">
+            <div id="inspectItemProgressBar" class="h-full bg-emerald-400 transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <button onclick="completeAndNextRoom()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-sm shadow-md btn-tap flex items-center justify-center gap-1.5">
+            <span>점검 저장 및 다음 객실로 이동</span>
+            <span>→</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 3: 객실 간 비교 분석 (Compare Rooms)                               -->
+    <!-- ===================================================================== -->
+    <main id="view-compare" class="flex-1 hidden p-4 space-y-4">
+      <div class="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+        <h2 class="text-base font-extrabold text-slate-900 mb-1">객실별 정밀 비교 분석</h2>
+        <p class="text-xs text-slate-500 mb-3">두 객실의 가중치 종합 점수, 구역별 강·약점 및 27개 항목 등급을 나란히 비교합니다.</p>
+        
+        <div class="grid grid-cols-11 items-center gap-2">
+          <div class="col-span-5">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">기준 객실 (A)</label>
+            <select id="compareRoomA" onchange="renderComparison()" class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-extrabold text-slate-900"></select>
+          </div>
+          <div class="col-span-1 text-center font-black text-slate-400 pt-4">VS</div>
+          <div class="col-span-5">
+            <label class="block text-[11px] font-bold text-slate-500 mb-1">비교 객실 (B)</label>
+            <select id="compareRoomB" onchange="renderComparison()" class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-extrabold text-slate-900"></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="compareResultContainer" class="space-y-4"></div>
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 4: 설정 및 엑셀/CSV 데이터 관리 (Settings & Export)                 -->
+    <!-- ===================================================================== -->
+    <main id="view-settings" class="flex-1 hidden p-4 space-y-4">
+      <div class="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">📊</span>
+          <div>
+            <h2 class="text-base font-extrabold text-slate-900">엑셀 / CSV 일괄 내보내기·불러오기</h2>
+            <p class="text-xs text-slate-500">397개 전체 객실 점검 결과를 보고서 양식으로 추출합니다.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 pt-1">
+          <button onclick="exportAllToCSV('INSPECTED')" class="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm flex items-center justify-between btn-tap">
+            <span>📥 점검 완료/진행 객실 내보내기 (CSV)</span>
+            <span class="text-xs bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-md font-extrabold" id="exportInspectedBadge">0실</span>
+          </button>
+
+          <button onclick="exportAllToCSV('ALL')" class="w-full py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm flex items-center justify-between btn-tap">
+            <span>📑 전체 397개 객실 마스터 시트 내보내기 (CSV)</span>
+            <span class="text-xs text-slate-500 font-semibold">10,719행</span>
+          </button>
+
+          <button onclick="exportSummaryToCSV()" class="w-full py-3 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-sm flex items-center justify-between btn-tap">
+            <span>🏆 객실별 종합점수·등급 요약표 내보내기</span>
+            <span class="text-xs text-emerald-700 font-semibold">397실 요약</span>
+          </button>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">기존 점검 엑셀/CSV 파일 불러오기 (.xlsx, .xls, .csv)</label>
+          <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" onchange="handleFileImport(event)"
+            class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer" />
+          <p class="text-[11px] text-slate-400 mt-1">* `객실이력 샘플` 양식과 동일한 컬럼 구조를 자동 인식합니다.</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-extrabold text-slate-900">구역별 가중치 설정</h2>
+            <p class="text-xs text-slate-500">비율 변경 시 397개 객실 점수가 즉시 재계산됩니다.</p>
+          </div>
+          <span id="weightSumBadge" class="text-xs font-extrabold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">합계: 100%</span>
+        </div>
+
+        <div id="weightSettingsContainer" class="space-y-2.5"></div>
+
+        <div class="flex gap-2 pt-2">
+          <button onclick="resetDefaultWeights()" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 btn-tap">기본값 복원</button>
+          <button onclick="saveWeights()" class="flex-2 flex-grow py-2.5 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 btn-tap">가중치 저장 및 전체 재계산</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 shadow-xs border border-slate-200 space-y-3">
+        <h2 class="text-base font-extrabold text-slate-900">등급 환산 및 종합등급 기준</h2>
+        <div class="grid grid-cols-5 gap-1.5 text-center text-xs">
+          <div class="p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+            <div class="font-black text-emerald-700">A등급</div>
+            <div class="text-slate-600 font-semibold mt-0.5">100점</div>
+          </div>
+          <div class="p-2 rounded-xl bg-blue-50 border border-blue-200">
+            <div class="font-black text-blue-700">B등급</div>
+            <div class="text-slate-600 font-semibold mt-0.5">80점</div>
+          </div>
+          <div class="p-2 rounded-xl bg-amber-50 border border-amber-200">
+            <div class="font-black text-amber-700">C등급</div>
+            <div class="text-slate-600 font-semibold mt-0.5">60점</div>
+          </div>
+          <div class="p-2 rounded-xl bg-orange-50 border border-orange-200">
+            <div class="font-black text-orange-700">D등급</div>
+            <div class="text-slate-600 font-semibold mt-0.5">40점</div>
+          </div>
+          <div class="p-2 rounded-xl bg-rose-50 border border-rose-200">
+            <div class="font-black text-rose-700">E등급</div>
+            <div class="text-slate-600 font-semibold mt-0.5">20점</div>
+          </div>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1">
+          <div class="font-bold text-slate-800">종합 등급 판정 기준 (100점 만점)</div>
+          <div>• <strong>A등급 (최우수)</strong>: 90점 이상</div>
+          <div>• <strong>B등급 (양호)</strong>: 75점 이상 ~ 90점 미만</div>
+          <div>• <strong>C등급 (보통/부분보수)</strong>: 50점 이상 ~ 75점 미만</div>
+          <div>• <strong>D등급 (미흡/집중보수)</strong>: 35점 이상 ~ 50점 미만</div>
+          <div>• <strong>E등급 (불량/긴급교체)</strong>: 35점 미만</div>
+          <div class="text-[11px] text-slate-400 pt-1">* 'none(미설치)' 선택 항목은 해당 구역 평균 계산에서 자동 제외됩니다.</div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 shadow-xs border border-rose-200/80 space-y-3">
+        <h2 class="text-base font-extrabold text-rose-700">객실 데이터 관리 및 초기화</h2>
+        <p class="text-xs text-slate-500">397개 맞춤 객실 번호 체계(1층~9층)를 빈 점검 상태로 초기화합니다.</p>
+        <button onclick="confirmFactoryReset()" class="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs btn-tap">
+          전체 데이터 초기화 (397실 빈 상태로 리셋)
+        </button>
+      </div>
+    </main>
+
+    <!-- 하단 고정 내비게이션 바 -->
+    <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 z-30 flex justify-around items-center shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+      <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn flex-1 flex flex-col items-center py-1.5 rounded-xl text-slate-900 font-bold">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+        <span class="text-[11px]">객실현황</span>
+      </button>
+
+      <button onclick="switchTab('inspect')" id="nav-inspect" class="nav-btn flex-1 flex flex-col items-center py-1.5 rounded-xl text-slate-400 font-medium">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        <span class="text-[11px]">현장점검</span>
+      </button>
+
+      <button onclick="switchTab('compare')" id="nav-compare" class="nav-btn flex-1 flex flex-col items-center py-1.5 rounded-xl text-slate-400 font-medium">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        <span class="text-[11px]">객실비교</span>
+      </button>
+
+      <button onclick="switchTab('settings')" id="nav-settings" class="nav-btn flex-1 flex flex-col items-center py-1.5 rounded-xl text-slate-400 font-medium">
+        <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span class="text-[11px]">가중치·출력</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    const INSPECTION_SCHEMA = [
+      {
+        zone: '욕실',
+        defaultWeight: 25,
+        icon: '🚿',
+        items: [
+          { id: '욕실_변기', name: '변기', checkpoint: '수압 및 배수 상태, 물때/파손 여부, 비데 작동 확인' },
+          { id: '욕실_세면대', name: '세면대', checkpoint: '수전 누수, 배수구 막힘, 도기 크랙 및 실리콘 곰팡이' },
+          { id: '욕실_샤워부스', name: '샤워부스', checkpoint: '유리 파티션 물때/파손, 샤워기 수압 및 온도 조절' },
+          { id: '욕실_욕조', name: '욕조', checkpoint: '표면 스크래치/변색, 배수 마개 작동, 코킹 상태' }
+        ]
+      },
+      {
+        zone: '주방',
+        defaultWeight: 25,
+        icon: '🍳',
+        items: [
+          { id: '주방_냉장고', name: '냉장고', checkpoint: '냉장/냉동 온도 유지, 소음 여부, 내부 청결 및 패킹 상태' },
+          { id: '주방_싱크_상판', name: '싱크_상판', checkpoint: '인조대리석/상판 오염, 스크래치, 수전 및 배수 누수' },
+          { id: '주방_인덕션', name: '인덕션', checkpoint: '전원 및 화구 가열 정상 작동, 상판 유리 파손 여부' },
+          { id: '주방_전자레인지', name: '전자레인지', checkpoint: '가열 정상 작동, 회전판 유무, 내부 오염도 확인' },
+          { id: '주방_식탁/의자', name: '식탁/의자', checkpoint: '상판 찍힘, 다리 흔들림, 의자 방석 오염/찢어짐' },
+          { id: '주방_주방 벽지', name: '주방 벽지', checkpoint: '기름때 오염, 찢어짐, 들뜸 및 변색 여부' },
+          { id: '주방_주방 장판', name: '주방 장판', checkpoint: '찍힘, 들뜸, 습기로 인한 변색 및 마모 상태' }
+        ]
+      },
+      {
+        zone: '거실',
+        defaultWeight: 20,
+        icon: '🛋️',
+        items: [
+          { id: '거실_거실TV', name: '거실TV', checkpoint: '화면 출력, 리모컨 작동, 셋톱박스 및 넷플릭스 연결' },
+          { id: '거실_소파_시트', name: '소파_시트', checkpoint: '가죽/패브릭 헤짐, 얼룩, 쿠션 꺼짐 정도' },
+          { id: '거실_소파_프레임', name: '소파_프레임', checkpoint: '하부 프레임 파손, 다리 흔들림 및 소음 여부' },
+          { id: '거실_티테이블', name: '티테이블', checkpoint: '상판 스크래치, 모서리 파손, 흔들림 점검' },
+          { id: '거실_거실_벽지', name: '거실_벽지', checkpoint: '오염, 낙서, 이음새 벌어짐 및 찢어짐 여부' },
+          { id: '거실_거실_장판', name: '거실_장판', checkpoint: '가구 눌림 자국, 긁힘, 들뜸 및 오염 상태' }
+        ]
+      },
+      {
+        zone: '안방',
+        defaultWeight: 20,
+        icon: '🛏️',
+        items: [
+          { id: '안방_안방_침대', name: '안방_침대', checkpoint: '매트리스 꺼짐/얼룩, 프레임 흔들림 및 헤드보드 파손' },
+          { id: '안방_안방_TV', name: '안방_TV', checkpoint: '전원 및 채널 수신, 리모컨 작동, 브라켓 고정 상태' },
+          { id: '안방_화장대_거울', name: '화장대_거울', checkpoint: '거울 부식/얼룩, 조명 작동 및 고정 상태' },
+          { id: '안방_화장대_의자', name: '화장대_의자', checkpoint: '스툴 시트 오염, 다리 흔들림 및 파손 여부' },
+          { id: '안방_화장대_테이블', name: '화장대_테이블', checkpoint: '상판 화장품 얼룩, 서랍 레일 작동 및 파손' },
+          { id: '안방_안방_벽지', name: '안방_벽지', checkpoint: '결로/곰팡이 흔적, 오염, 찢어짐 여부' },
+          { id: '안방_안방_장판', name: '안방_장판', checkpoint: '바닥 긁힘, 변색, 들뜸 및 청소 상태' }
+        ]
+      },
+      {
+        zone: '작은방',
+        defaultWeight: 10,
+        icon: '🚪',
+        items: [
+          { id: '작은방_작은방_침대', name: '작은방_침대', checkpoint: '매트리스 상태, 프레임 고정 및 침구류 청결' },
+          { id: '작은방_작은방_벽지', name: '작은방_벽지', checkpoint: '벽면 오염, 찍힘, 들뜸 여부' },
+          { id: '작은방_작은방_장판', name: '작은방_장판', checkpoint: '바닥재 손상, 오염 및 이음새 상태' }
+        ]
+      }
+    ];
+
+    const CUSTOM_FLOOR_RANGES = [
+      { floor: 1, label: '1층', ranges: [[1101, 1117], [1151, 1159]] },
+      { floor: 2, label: '2층', ranges: [[2201, 2231], [2251, 2270]] },
+      { floor: 3, label: '3층', ranges: [[3301, 3332], [3351, 3380]] },
+      { floor: 4, label: '4층', ranges: [[4401, 4433], [4451, 4482]] },
+      { floor: 5, label: '5층', ranges: [[5501, 5531], [5551, 5583]] },
+      { floor: 6, label: '6층', ranges: [[6601, 6625], [6651, 6681]] },
+      { floor: 7, label: '7층', ranges: [[7701, 7718], [7751, 7775]] },
+      { floor: 8, label: '8층', ranges: [[8801, 8806], [8851, 8867]] },
+      { floor: 9, label: '9층', ranges: [[9951, 9957]] }
+    ];
+
+    const GRADE_SCORES = { A: 100, B: 80, C: 60, D: 40, E: 20 };
+    const TOTAL_ITEMS_COUNT = 27;
+    const MAX_PHOTOS_PER_ITEM = 3;
+    const STORAGE_KEY = 'hotel_smart_inspection_397_photo_v1';
+
+    let appState = {
+      weights: { '욕실': 25, '주방': 25, '거실': 20, '안방': 20, '작은방': 10 },
+      rooms: {},
+      roomOrder: [],
+      currentRoomNo: '1101',
+      currentFilter: 'ALL'
+    };
+
+    let pendingPhotoTarget = { itemId: null, itemName: '' };
+
+    function createInitialRoomsData() {
+      const rooms = {};
+      const roomOrder = [];
+      const today = getTodayStr();
+
+      CUSTOM_FLOOR_RANGES.forEach(cfg => {
+        cfg.ranges.forEach(([start, end]) => {
+          for (let num = start; num <= end; num++) {
+            const roomNo = String(num);
+            roomOrder.push(roomNo);
+            rooms[roomNo] = {
+              roomNo,
+              floor: cfg.floor,
+              date: today,
+              items: {}
+            };
+          }
+        });
+      });
+
+      return { rooms, roomOrder };
+    }
+
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.rooms && Array.isArray(parsed.roomOrder) && parsed.roomOrder.length > 0) {
+            appState = { ...appState, ...parsed };
+            if (!appState.rooms[appState.currentRoomNo]) {
+              appState.currentRoomNo = appState.roomOrder[0];
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('데이터 로드 오류:', e);
+      }
+      const initial = createInitialRoomsData();
+      appState.rooms = initial.rooms;
+      appState.roomOrder = initial.roomOrder;
+      appState.currentRoomNo = initial.roomOrder[0];
+      saveState();
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+        const indicator = document.getElementById('saveIndicator');
+        if (indicator) {
+          indicator.textContent = '● 저장완료';
+          indicator.classList.remove('text-amber-400', 'text-rose-400');
+          indicator.classList.add('text-emerald-400');
+        }
+      } catch (e) {
+        const indicator = document.getElementById('saveIndicator');
+        if (indicator) {
+          indicator.textContent = '● 용량주의';
+          indicator.classList.remove('text-emerald-400');
+          indicator.classList.add('text-rose-400');
+        }
+        showToast('브라우저 사진 저장 공간이 부족합니다. 오래된 사진을 일부 삭제해 주세요.', 'error');
+      }
+    }
+
+    function getRoomPhotoCount(room) {
+      let count = 0;
+      const items = room.items || {};
+      Object.values(items).forEach(entry => {
+        if (entry && Array.isArray(entry.photos)) {
+          count += entry.photos.length;
+        }
+      });
+      return count;
+    }
+
+    function evaluateRoom(room) {
+      const items = room.items || {};
+      let answeredCount = 0;
+      let validCount = 0;
+      let hasGradeE = false;
+      let countD = 0;
+      let countE = 0;
+
+      const zoneResults = {};
+      let weightedSum = 0;
+      let activeWeightSum = 0;
+
+      INSPECTION_SCHEMA.forEach(zoneObj => {
+        const zoneName = zoneObj.zone;
+        const weight = Number(appState.weights[zoneName] || 0);
+        let zoneScoreSum = 0;
+        let zoneValidItems = 0;
+        let zoneAnsweredItems = 0;
+
+        zoneObj.items.forEach(item => {
+          const entry = items[item.id];
+          if (entry && entry.grade) {
+            answeredCount++;
+            zoneAnsweredItems++;
+            if (entry.grade !== 'none' && GRADE_SCORES[entry.grade] !== undefined) {
+              const sc = GRADE_SCORES[entry.grade];
+              zoneScoreSum += sc;
+              zoneValidItems++;
+              validCount++;
+              if (entry.grade === 'E') { hasGradeE = true; countE++; }
+              if (entry.grade === 'D') { countD++; }
+            }
+          }
+        });
+
+        const zoneAvg = zoneValidItems > 0 ? (zoneScoreSum / zoneValidItems) : null;
+        zoneResults[zoneName] = {
+          avg: zoneAvg,
+          weight,
+          validItems: zoneValidItems,
+          answeredItems: zoneAnsweredItems,
+          totalItems: zoneObj.items.length
+        };
+
+        if (zoneAvg !== null && weight > 0) {
+          weightedSum += zoneAvg * (weight / 100);
+          activeWeightSum += (weight / 100);
+        }
+      });
+
+      let status = 'PENDING';
+      if (answeredCount === TOTAL_ITEMS_COUNT) {
+        status = 'COMPLETED';
+      } else if (answeredCount > 0) {
+        status = 'IN_PROGRESS';
+      }
+
+      let totalScore = null;
+      if (activeWeightSum > 0) {
+        totalScore = weightedSum / activeWeightSum;
+      }
+
+      let totalGrade = '-';
+      if (totalScore !== null) {
+        if (totalScore >= 90) totalGrade = 'A';
+        else if (totalScore >= 75) totalGrade = 'B';
+        else if (totalScore >= 50) totalGrade = 'C';
+        else if (totalScore >= 35) totalGrade = 'D';
+        else totalGrade = 'E';
+      }
+
+      const isUrgent = hasGradeE || countD >= 10 || totalGrade === 'D' || totalGrade === 'E';
+
+      return {
+        status,
+        answeredCount,
+        validCount,
+        totalScore,
+        totalGrade,
+        zoneResults,
+        hasGradeE,
+        countE,
+        countD,
+        isUrgent,
+        photoCount: getRoomPhotoCount(room)
+      };
+    }
+
+    function getGradeBadgeStyle(grade) {
+      switch (grade) {
+        case 'A': return 'bg-emerald-500 text-white border-emerald-600';
+        case 'B': return 'bg-blue-500 text-white border-blue-600';
+        case 'C': return 'bg-amber-400 text-slate-950 border-amber-500';
+        case 'D': return 'bg-orange-500 text-white border-orange-600';
+        case 'E': return 'bg-rose-600 text-white border-rose-700';
+        case 'none': return 'bg-slate-400 text-white border-slate-500';
+        default: return 'bg-slate-200 text-slate-500 border-slate-300';
+      }
+    }
+
+    function getGradeTextColor(grade) {
+      switch (grade) {
+        case 'A': return 'text-emerald-600';
+        case 'B': return 'text-blue-600';
+        case 'C': return 'text-amber-600';
+        case 'D': return 'text-orange-600';
+        case 'E': return 'text-rose-600';
+        default: return 'text-slate-400';
+      }
+    }
+
+    function switchTab(tabName) {
+      const tabs = ['dashboard', 'inspect', 'compare', 'settings'];
+      tabs.forEach(t => {
+        const view = document.getElementById(`view-${t}`);
+        const nav = document.getElementById(`nav-${t}`);
+        if (t === tabName) {
+          view.classList.remove('hidden');
+          if (t === 'inspect') view.classList.add('flex');
+          nav.classList.remove('text-slate-400', 'font-medium');
+          nav.classList.add('text-slate-900', 'font-bold', 'bg-slate-100');
+        } else {
+          view.classList.add('hidden');
+          view.classList.remove('flex');
+          nav.classList.add('text-slate-400', 'font-medium');
+          nav.classList.remove('text-slate-900', 'font-bold', 'bg-slate-100');
+        }
+      });
+
+      if (tabName === 'dashboard') {
+        renderDashboard();
+      } else if (tabName === 'inspect') {
+        renderInspectView();
+      } else if (tabName === 'compare') {
+        initCompareSelects();
+        renderComparison();
+      } else if (tabName === 'settings') {
+        renderSettingsView();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function initFloorDropdown() {
+      const floorSelect = document.getElementById('floorSelect');
+      floorSelect.innerHTML = '<option value="ALL">전체 층 (1~9F)</option>';
+      CUSTOM_FLOOR_RANGES.forEach(cfg => {
+        const count = cfg.ranges.reduce((acc, [s, e]) => acc + (e - s + 1), 0);
+        const desc = cfg.ranges.map(([s, e]) => `${s}~${e}`).join(', ');
+        const opt = document.createElement('option');
+        opt.value = String(cfg.floor);
+        opt.textContent = `${cfg.label} (${desc} / ${count}실)`;
+        floorSelect.appendChild(opt);
+      });
+    }
+
+    function setDashFilter(filter) {
+      appState.currentFilter = filter;
+      document.querySelectorAll('.filter-chip').forEach(btn => {
+        if (btn.dataset.filter === filter) {
+          btn.className = 'filter-chip px-3 py-1.5 rounded-full text-xs font-bold bg-slate-900 text-white whitespace-nowrap shadow-xs';
+        } else if (btn.dataset.filter === 'URGENT') {
+          btn.className = 'filter-chip px-3 py-1.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap';
+        } else {
+          btn.className = 'filter-chip px-3 py-1.5 rounded-full text-xs font-semibold bg-white text-slate-600 border border-slate-200 whitespace-nowrap';
+        }
+      });
+      renderRoomGrid();
+    }
+
+    function clearSearch() {
+      document.getElementById('roomSearchInput').value = '';
+      document.getElementById('clearSearchBtn').classList.add('hidden');
+      renderRoomGrid();
+    }
+
+    function renderDashboard() {
+      let completed = 0;
+      let inProgress = 0;
+      let pending = 0;
+      let urgent = 0;
+      let scoreSum = 0;
+      let scoredRooms = 0;
+      const gradeCounts = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+
+      appState.roomOrder.forEach(roomNo => {
+        const ev = evaluateRoom(appState.rooms[roomNo]);
+        if (ev.status === 'COMPLETED') {
+          completed++;
+          if (ev.totalGrade in gradeCounts) gradeCounts[ev.totalGrade]++;
+        } else if (ev.status === 'IN_PROGRESS') {
+          inProgress++;
+        } else {
+          pending++;
+        }
+
+        if (ev.totalScore !== null) {
+          scoreSum += ev.totalScore;
+          scoredRooms++;
+        }
+        if (ev.status !== 'PENDING' && ev.isUrgent) {
+          urgent++;
+        }
+      });
+
+      const total = appState.roomOrder.length;
+      const pct = total > 0 ? ((completed / total) * 100).toFixed(1) : '0.0';
+
+      document.getElementById('dashProgressPercent').textContent = `${pct}%`;
+      document.getElementById('dashProgressCount').textContent = `${completed} / ${total}실 완료`;
+      document.getElementById('dashProgressBar').style.width = `${Math.max(Number(pct), completed > 0 ? 2 : 0)}%`;
+
+      document.getElementById('statCompleted').textContent = completed;
+      document.getElementById('statInProgress').textContent = inProgress;
+      document.getElementById('statPending').textContent = pending;
+      document.getElementById('statUrgent').textContent = urgent;
+
+      document.getElementById('gradeCountA').textContent = gradeCounts.A;
+      document.getElementById('gradeCountB').textContent = gradeCounts.B;
+      document.getElementById('gradeCountC').textContent = gradeCounts.C;
+      document.getElementById('gradeCountD').textContent = gradeCounts.D;
+      document.getElementById('gradeCountE').textContent = gradeCounts.E;
+
+      const avgScore = scoredRooms > 0 ? (scoreSum / scoredRooms).toFixed(2) : '0.00';
+      document.getElementById('dashAvgScore').textContent = `${avgScore}점`;
+
+      renderRoomGrid();
+    }
+
+    function renderRoomGrid() {
+      const container = document.getElementById('roomGridContainer');
+      const searchVal = document.getElementById('roomSearchInput').value.trim().toLowerCase();
+      const floorVal = document.getElementById('floorSelect').value;
+      const filter = appState.currentFilter;
+
+      const clearBtn = document.getElementById('clearSearchBtn');
+      if (searchVal) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+
+      const filteredRooms = appState.roomOrder.filter(roomNo => {
+        const room = appState.rooms[roomNo];
+        if (!room) return false;
+        if (floorVal !== 'ALL' && String(room.floor) !== floorVal) return false;
+        if (searchVal && !roomNo.toLowerCase().includes(searchVal)) return false;
+
+        const ev = evaluateRoom(room);
+        if (filter === 'COMPLETED' && ev.status !== 'COMPLETED') return false;
+        if (filter === 'IN_PROGRESS' && ev.status !== 'IN_PROGRESS') return false;
+        if (filter === 'PENDING' && ev.status !== 'PENDING') return false;
+        if (filter === 'URGENT' && !(ev.status !== 'PENDING' && ev.isUrgent)) return false;
+        if (filter.startsWith('GRADE_')) {
+          const targetG = filter.replace('GRADE_', '');
+          if (ev.status !== 'COMPLETED' || ev.totalGrade !== targetG) return false;
+        }
+        return true;
+      });
+
+      if (filteredRooms.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full bg-white rounded-2xl p-8 text-center border border-slate-200">
+            <div class="text-2xl mb-2">🔍</div>
+            <div class="text-sm font-bold text-slate-700">조건에 해당하는 객실이 없습니다.</div>
+            <button onclick="setDashFilter('ALL'); clearSearch();" class="mt-3 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">필터 초기화</button>
+          </div>
+        `;
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      filteredRooms.forEach(roomNo => {
+        const room = appState.rooms[roomNo];
+        const ev = evaluateRoom(room);
+
+        const card = document.createElement('div');
+        let borderClass = 'border-slate-200 bg-white';
+        if (ev.status === 'COMPLETED') {
+          borderClass = ev.hasGradeE ? 'border-rose-300 bg-rose-50/30' : 'border-emerald-200 bg-white';
+        } else if (ev.status === 'IN_PROGRESS') {
+          borderClass = 'border-amber-300 bg-amber-50/30';
+        }
+
+        card.className = `rounded-2xl p-3 border ${borderClass} shadow-2xs hover:shadow-md transition cursor-pointer btn-tap flex flex-col justify-between`;
+        card.onclick = () => {
+          appState.currentRoomNo = roomNo;
+          switchTab('inspect');
+        };
+
+        let statusBadge = `<span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500">미점검</span>`;
+        if (ev.status === 'COMPLETED') {
+          statusBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">완료</span>`;
+        } else if (ev.status === 'IN_PROGRESS') {
+          statusBadge = `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700">${ev.answeredCount}/27</span>`;
+        }
+
+        const gradeDisplay = ev.totalScore !== null
+          ? `<div class="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
+              <span class="text-xs font-extrabold text-slate-800">${ev.totalScore.toFixed(1)}점</span>
+              <span class="w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center ${getGradeBadgeStyle(ev.totalGrade)}">${ev.totalGrade}</span>
+            </div>`
+          : `<div class="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
+              <span class="text-[11px] text-slate-400">터치하여 점검</span>
+              <span class="text-xs text-slate-300 font-bold">→</span>
+            </div>`;
+
+        const photoTag = ev.photoCount > 0
+          ? `<span class="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-md mt-1 mr-1">📷 ${ev.photoCount}장</span>`
+          : '';
+
+        const urgentTag = (ev.status !== 'PENDING' && ev.hasGradeE)
+          ? `<span class="inline-block text-[10px] font-bold text-rose-600 mt-1">🚨 E등급(${ev.countE}건)</span>`
+          : (ev.status !== 'PENDING' && ev.countD >= 8)
+            ? `<span class="inline-block text-[10px] font-bold text-orange-600 mt-1">⚠️ D등급(${ev.countD}건)</span>`
+            : '';
+
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-base font-black text-slate-900">${roomNo}호</span>
+              ${statusBadge}
+            </div>
+            <div class="text-[11px] text-slate-400 mt-0.5">${room.floor}층</div>
+            <div class="flex flex-wrap items-center gap-1">${photoTag}${urgentTag}</div>
+          </div>
+          ${gradeDisplay}
+        `;
+        fragment.appendChild(card);
+      });
+
+      container.innerHTML = '';
+      container.appendChild(fragment);
+    }
+
+    function renderInspectView() {
+      const roomSelect = document.getElementById('inspectRoomSelect');
+      if (roomSelect.options.length === 0) {
+        appState.roomOrder.forEach(rNo => {
+          const opt = document.createElement('option');
+          opt.value = rNo;
+          opt.textContent = `${rNo}호`;
+          roomSelect.appendChild(opt);
+        });
+      }
+      roomSelect.value = appState.currentRoomNo;
+
+      const room = appState.rooms[appState.currentRoomNo];
+      document.getElementById('inspectDateInput').value = room.date || getTodayStr();
+
+      updateLiveScoreHeader();
+      renderChecklistItems();
+    }
+
+    function selectRoomForInspect(roomNo) {
+      appState.currentRoomNo = roomNo;
+      renderInspectView();
+    }
+
+    function navigateRoom(delta) {
+      const idx = appState.roomOrder.indexOf(appState.currentRoomNo);
+      const nextIdx = idx + delta;
+      if (nextIdx >= 0 && nextIdx < appState.roomOrder.length) {
+        appState.currentRoomNo = appState.roomOrder[nextIdx];
+        renderInspectView();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        showToast(delta < 0 ? '첫 번째 객실입니다.' : '마지막 객실입니다.', 'info');
+      }
+    }
+
+    function updateRoomDate(newDate) {
+      const room = appState.rooms[appState.currentRoomNo];
+      room.date = newDate;
+      saveState();
+    }
+
+    function updateLiveScoreHeader() {
+      const room = appState.rooms[appState.currentRoomNo];
+      const ev = evaluateRoom(room);
+
+      const scoreEl = document.getElementById('liveTotalScore');
+      const badgeEl = document.getElementById('liveTotalGradeBadge');
+
+      if (ev.totalScore !== null) {
+        scoreEl.textContent = `${ev.totalScore.toFixed(2)}점`;
+        badgeEl.textContent = ev.totalGrade;
+        badgeEl.className = `w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black shadow-xs border ${getGradeBadgeStyle(ev.totalGrade)}`;
+      } else {
+        scoreEl.textContent = '0.00점';
+        badgeEl.textContent = '-';
+        badgeEl.className = 'w-10 h-10 rounded-xl bg-slate-200 text-slate-500 flex items-center justify-center text-lg font-black';
+      }
+
+      const quickTabs = document.getElementById('zoneQuickTabs');
+      quickTabs.innerHTML = INSPECTION_SCHEMA.map(z => {
+        const zRes = ev.zoneResults[z.zone];
+        const avgTxt = zRes.avg !== null ? `${Math.round(zRes.avg)}점` : `${zRes.answeredItems}/${zRes.totalItems}`;
+        const isDone = zRes.answeredItems === zRes.totalItems;
+        return `
+          <button onclick="scrollToZone('${z.zone}')" class="py-1.5 px-1 rounded-lg text-center border transition ${isDone ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' : 'bg-slate-50 border-slate-200 text-slate-700'}">
+            <div class="text-[11px] font-bold truncate">${z.zone}</div>
+            <div class="text-[10px] font-semibold ${isDone ? 'text-emerald-600' : 'text-slate-400'}">${avgTxt}</div>
+          </button>
+        `;
+      }).join('');
+
+      const pct = Math.round((ev.answeredCount / TOTAL_ITEMS_COUNT) * 100);
+      document.getElementById('inspectItemProgressText').textContent = `${ev.answeredCount} / ${TOTAL_ITEMS_COUNT} 항목 완료 (${pct}%)`;
+      document.getElementById('inspectItemProgressBar').style.width = `${pct}%`;
+    }
+
+    function scrollToZone(zoneName) {
+      const el = document.getElementById(`zone-section-${zoneName}`);
+      if (el) {
+        const yOffset = -175;
+        const y = el.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }
+
+    function renderChecklistItems() {
+      const container = document.getElementById('inspectionChecklistContainer');
+      const room = appState.rooms[appState.currentRoomNo];
+      const ev = evaluateRoom(room);
+
+      const grades = ['A', 'B', 'C', 'D', 'E', 'none'];
+
+      container.innerHTML = INSPECTION_SCHEMA.map(zoneObj => {
+        const zRes = ev.zoneResults[zoneObj.zone];
+        const zAvgText = zRes.avg !== null ? `평균 ${zRes.avg.toFixed(1)}점` : '미산출';
+
+        const itemsHtml = zoneObj.items.map(item => {
+          const currentEntry = room.items[item.id] || { grade: '', note: '', photos: [] };
+          const selectedGrade = currentEntry.grade;
+          const noteText = currentEntry.note || '';
+          const photos = Array.isArray(currentEntry.photos) ? currentEntry.photos : [];
+
+          const buttonsHtml = grades.map(g => {
+            const isSelected = selectedGrade === g;
+            let btnStyle = 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200';
+            if (isSelected) {
+              btnStyle = `${getGradeBadgeStyle(g)} ring-2 ring-offset-1 ring-slate-900/20 font-black shadow-xs`;
+            }
+            const label = g === 'none' ? '없음' : g;
+            return `
+              <button type="button"
+                onclick="setItemGrade('${item.id}', '${g}')"
+                class="flex-1 py-2.5 rounded-xl text-xs font-bold border transition btn-tap ${btnStyle}">
+                ${label}
+              </button>
+            `;
+          }).join('');
+
+          const isWarningGrade = selectedGrade === 'D' || selectedGrade === 'E';
+          const noteBorderClass = isWarningGrade
+            ? 'border-rose-300 bg-rose-50/40 focus:ring-rose-500'
+            : 'border-slate-200 bg-slate-50 focus:ring-slate-900';
+
+          const photoThumbsHtml = photos.length > 0
+            ? `
+              <div class="flex gap-2 mt-2.5 overflow-x-auto no-scrollbar pb-1">
+                ${photos.map((photoSrc, pIdx) => `
+                  <div class="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 group">
+                    <img src="${photoSrc}" alt="${escapeHtml(item.name)} 사진 ${pIdx + 1}"
+                      onclick="openPhotoPreview('${encodeURIComponent(photoSrc)}', '${escapeHtml(room.roomNo)}호 · ${escapeHtml(item.name)} (${pIdx + 1}/${photos.length})')"
+                      class="w-full h-full object-cover cursor-pointer" />
+                    <button type="button"
+                      onclick="deleteItemPhoto('${item.id}', ${pIdx})"
+                      class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-white text-[10px] font-bold flex items-center justify-center hover:bg-rose-600"
+                      title="사진 삭제">✕</button>
+                  </div>
+                `).join('')}
+              </div>
+            `
+            : '';
+
+          return `
+            <div class="p-3.5 border-b border-slate-100 last:border-b-0">
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <div>
+                  <span class="text-sm font-extrabold text-slate-900">${item.name}</span>
+                  ${selectedGrade ? `<span class="ml-1.5 text-[11px] font-bold ${getGradeTextColor(selectedGrade)}">${selectedGrade === 'none' ? '제외(none)' : GRADE_SCORES[selectedGrade] + '점'}</span>` : '<span class="ml-1.5 text-[10px] text-rose-500 font-semibold">미선택</span>'}
+                </div>
+                <button type="button"
+                  onclick="triggerItemPhotoUpload('${item.id}', '${escapeHtml(item.name)}')"
+                  class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition btn-tap flex items-center gap-1 ${photos.length > 0 ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}">
+                  <span>📷</span>
+                  <span>${photos.length > 0 ? `사진 ${photos.length}/${MAX_PHOTOS_PER_ITEM}` : '사진 추가'}</span>
+                </button>
+              </div>
+              <p class="text-[11px] text-slate-500 mb-2.5 leading-snug">${item.checkpoint}</p>
+
+              <div class="flex gap-1.5 mb-2">
+                ${buttonsHtml}
+              </div>
+
+              <div class="relative">
+                <input type="text"
+                  value="${escapeHtml(noteText)}"
+                  placeholder="${isWarningGrade ? '⚠️ 파손/교체 사유 및 조치사항을 입력하세요 (권장)' : '특이사항 및 메모 입력 (선택)'}"
+                  onchange="setItemNote('${item.id}', this.value)"
+                  class="w-full px-3 py-2 rounded-xl text-xs border ${noteBorderClass} focus:outline-none focus:ring-1" />
+              </div>
+
+              ${photoThumbsHtml}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <section id="zone-section-${zoneObj.zone}" class="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden">
+            <div class="bg-slate-800 text-white px-4 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-base">${zoneObj.icon}</span>
+                <div>
+                  <h3 class="text-sm font-extrabold">${zoneObj.zone} <span class="text-xs font-normal text-slate-300">(가중치 ${zRes.weight}%)</span></h3>
+                </div>
+              </div>
+              <div class="text-right">
+                <span class="text-xs font-bold text-emerald-400">${zAvgText}</span>
+                <span class="text-[11px] text-slate-400 ml-1">(${zRes.answeredItems}/${zRes.totalItems})</span>
+              </div>
+            </div>
+            <div>
+              ${itemsHtml}
+            </div>
+          </section>
+        `;
+      }).join('');
+    }
+
+    function triggerItemPhotoUpload(itemId, itemName) {
+      const room = appState.rooms[appState.currentRoomNo];
+      const existing = room.items[itemId]?.photos || [];
+      if (existing.length >= MAX_PHOTOS_PER_ITEM) {
+        showToast(`항목당 최대 ${MAX_PHOTOS_PER_ITEM}장까지 첨부할 수 있습니다. 기존 사진을 삭제 후 추가해 주세요.`, 'info');
+        return;
+      }
+      pendingPhotoTarget = { itemId, itemName };
+      const input = document.getElementById('itemPhotoFileInput');
+      input.value = '';
+      input.click();
+    }
+
+    function handleItemPhotoSelected(event) {
+      const files = Array.from(event.target.files || []);
+      if (files.length === 0 || !pendingPhotoTarget.itemId) return;
+
+      const room = appState.rooms[appState.currentRoomNo];
+      const itemId = pendingPhotoTarget.itemId;
+      const itemName = pendingPhotoTarget.itemName;
+
+      if (!room.items[itemId]) {
+        room.items[itemId] = { grade: '', note: '', photos: [] };
+      }
+      if (!Array.isArray(room.items[itemId].photos)) {
+        room.items[itemId].photos = [];
+      }
+
+      const remainSlots = MAX_PHOTOS_PER_ITEM - room.items[itemId].photos.length;
+      const targetFiles = files.slice(0, remainSlots);
+
+      if (files.length > remainSlots) {
+        showToast(`최대 ${MAX_PHOTOS_PER_ITEM}장까지만 저장되어 ${remainSlots}장만 추가됩니다.`, 'info');
+      }
+
+      Promise.all(targetFiles.map(file => compressImageFile(file, 800, 0.72)))
+        .then(compressedList => {
+          room.items[itemId].photos.push(...compressedList);
+          saveState();
+          renderChecklistItems();
+          showToast(`${itemName} 항목에 사진 ${compressedList.length}장이 첨부되었습니다.`, 'success');
+        })
+        .catch(() => {
+          showToast('이미지를 처리하는 중 오류가 발생했습니다.', 'error');
+        });
+    }
+
+    function compressImageFile(file, maxWidth = 800, quality = 0.72) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function deleteItemPhoto(itemId, photoIndex) {
+      const room = appState.rooms[appState.currentRoomNo];
+      const entry = room.items[itemId];
+      if (!entry || !Array.isArray(entry.photos)) return;
+
+      entry.photos.splice(photoIndex, 1);
+      saveState();
+      renderChecklistItems();
+      showToast('사진이 삭제되었습니다.', 'info');
+    }
+
+    function openPhotoPreview(encodedSrc, caption) {
+      const modal = document.getElementById('photoPreviewModal');
+      document.getElementById('photoPreviewImg').src = decodeURIComponent(encodedSrc);
+      document.getElementById('photoPreviewCaption').textContent = caption;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closePhotoPreview() {
+      const modal = document.getElementById('photoPreviewModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.getElementById('photoPreviewImg').src = '';
+    }
+
+    function setItemGrade(itemId, grade) {
+      const room = appState.rooms[appState.currentRoomNo];
+      if (!room.items[itemId]) {
+        room.items[itemId] = { grade: '', note: '', photos: [] };
+      }
+      if (room.items[itemId].grade === grade) {
+        room.items[itemId].grade = '';
+      } else {
+        room.items[itemId].grade = grade;
+      }
+      saveState();
+      updateLiveScoreHeader();
+      renderChecklistItems();
+    }
+
+    function setItemNote(itemId, note) {
+      const room = appState.rooms[appState.currentRoomNo];
+      if (!room.items[itemId]) {
+        room.items[itemId] = { grade: '', note: '', photos: [] };
+      }
+      room.items[itemId].note = note.trim();
+      saveState();
+    }
+
+    function copyPrevRoomStructure() {
+      const idx = appState.roomOrder.indexOf(appState.currentRoomNo);
+      if (idx <= 0) {
+        showToast('복사할 이전 객실이 없습니다.', 'info');
+        return;
+      }
+      const prevRoomNo = appState.roomOrder[idx - 1];
+      const prevRoom = appState.rooms[prevRoomNo];
+      const currRoom = appState.rooms[appState.currentRoomNo];
+
+      let copiedCount = 0;
+      INSPECTION_SCHEMA.forEach(z => {
+        z.items.forEach(item => {
+          const prevEntry = prevRoom.items[item.id];
+          if (prevEntry && prevEntry.grade === 'none') {
+            const currPhotos = currRoom.items[item.id]?.photos || [];
+            currRoom.items[item.id] = { grade: 'none', note: prevEntry.note || '미설치 타입', photos: currPhotos };
+            copiedCount++;
+          }
+        });
+      });
+
+      if (copiedCount === 0) {
+        showToast(`${prevRoomNo}호에 설정된 '없음(none)' 항목이 없습니다.`, 'info');
+      } else {
+        saveState();
+        renderInspectView();
+        showToast(`${prevRoomNo}호의 미설치 항목 ${copiedCount}개를 복사했습니다.`, 'success');
+      }
+    }
+
+    function openBulkFillModal() {
+      const room = appState.rooms[appState.currentRoomNo];
+      let emptyCount = 0;
+      INSPECTION_SCHEMA.forEach(z => {
+        z.items.forEach(item => {
+          if (!room.items[item.id] || !room.items[item.id].grade) emptyCount++;
+        });
+      });
+
+      if (emptyCount === 0) {
+        showToast('이미 27개 모든 항목이 입력되어 있습니다.', 'info');
+        return;
+      }
+
+      const modal = document.getElementById('customModal');
+      document.getElementById('modalTitle').textContent = '미입력 항목 일괄 적용';
+      document.getElementById('modalMessage').textContent = `현재 ${appState.currentRoomNo}호의 미입력된 ${emptyCount}개 항목에 일괄 적용할 등급을 선택하세요.`;
+      
+      const extra = document.getElementById('modalExtraInput');
+      extra.classList.remove('hidden');
+      extra.innerHTML = `
+        <div class="grid grid-cols-5 gap-2">
+          ${['A', 'B', 'C', 'D', 'E'].map(g => `
+            <button type="button" onclick="applyBulkGrade('${g}')" class="py-3 rounded-xl font-black text-sm border ${getGradeBadgeStyle(g)} btn-tap">
+              ${g}등급
+            </button>
+          `).join('')}
+        </div>
+      `;
+
+      document.getElementById('modalConfirmBtn').classList.add('hidden');
+      document.getElementById('modalCancelBtn').onclick = closeModal;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function applyBulkGrade(grade) {
+      const room = appState.rooms[appState.currentRoomNo];
+      let filled = 0;
+      INSPECTION_SCHEMA.forEach(z => {
+        z.items.forEach(item => {
+          if (!room.items[item.id] || !room.items[item.id].grade) {
+            room.items[item.id] = {
+              grade,
+              note: room.items[item.id]?.note || '',
+              photos: room.items[item.id]?.photos || []
+            };
+            filled++;
+          }
+        });
+      });
+      closeModal();
+      saveState();
+      renderInspectView();
+      showToast(`미입력 ${filled}개 항목에 ${grade}등급을 일괄 적용했습니다.`, 'success');
+    }
+
+    function resetCurrentRoom() {
+      showConfirmModal(
+        `${appState.currentRoomNo}호 점검 초기화`,
+        `${appState.currentRoomNo}호에 입력된 모든 등급, 메모 및 사진을 초기화하시겠습니까?`,
+        () => {
+          appState.rooms[appState.currentRoomNo].items = {};
+          saveState();
+          renderInspectView();
+          showToast(`${appState.currentRoomNo}호 데이터가 초기화되었습니다.`, 'info');
+        }
+      );
+    }
+
+    function completeAndNextRoom() {
+      const room = appState.rooms[appState.currentRoomNo];
+      const ev = evaluateRoom(room);
+      saveState();
+      showToast(`${appState.currentRoomNo}호 저장 완료 (${ev.totalScore !== null ? ev.totalScore.toFixed(1) + '점 / ' + ev.totalGrade + '등급' : '진행중'})`, 'success');
+      navigateRoom(1);
+    }
+
+    function initCompareSelects() {
+      const selA = document.getElementById('compareRoomA');
+      const selB = document.getElementById('compareRoomB');
+      if (selA.options.length === 0) {
+        appState.roomOrder.forEach(rNo => {
+          const optA = document.createElement('option');
+          optA.value = rNo;
+          optA.textContent = `${rNo}호`;
+          selA.appendChild(optA);
+
+          const optB = document.createElement('option');
+          optB.value = rNo;
+          optB.textContent = `${rNo}호`;
+          selB.appendChild(optB);
+        });
+        selA.value = appState.roomOrder[0] || '1101';
+        selB.value = appState.roomOrder[1] || '1102';
+      }
+    }
+
+    function renderComparison() {
+      const rNoA = document.getElementById('compareRoomA').value;
+      const rNoB = document.getElementById('compareRoomB').value;
+      const roomA = appState.rooms[rNoA];
+      const roomB = appState.rooms[rNoB];
+      const evA = evaluateRoom(roomA);
+      const evB = evaluateRoom(roomB);
+
+      const container = document.getElementById('compareResultContainer');
+
+      const scoreA = evA.totalScore !== null ? evA.totalScore.toFixed(2) : '-';
+      const scoreB = evB.totalScore !== null ? evB.totalScore.toFixed(2) : '-';
+      const diff = (evA.totalScore !== null && evB.totalScore !== null)
+        ? (evB.totalScore - evA.totalScore).toFixed(2)
+        : null;
+
+      const diffBadge = diff !== null
+        ? (Number(diff) > 0
+            ? `<span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">${rNoB}호가 +${diff}점 우위</span>`
+            : Number(diff) < 0
+              ? `<span class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">${rNoA}호가 +${Math.abs(Number(diff)).toFixed(2)}점 우위</span>`
+              : `<span class="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">동점</span>`)
+        : '';
+
+      const zoneCompareRows = INSPECTION_SCHEMA.map(z => {
+        const zA = evA.zoneResults[z.zone];
+        const zB = evB.zoneResults[z.zone];
+        const valA = zA.avg !== null ? zA.avg.toFixed(1) : '-';
+        const valB = zB.avg !== null ? zB.avg.toFixed(1) : '-';
+
+        let diffTxt = '-';
+        let diffColor = 'text-slate-400';
+        if (zA.avg !== null && zB.avg !== null) {
+          const d = zB.avg - zA.avg;
+          diffTxt = d > 0 ? `+${d.toFixed(1)}` : d.toFixed(1);
+          diffColor = d > 0 ? 'text-emerald-600 font-bold' : d < 0 ? 'text-rose-600 font-bold' : 'text-slate-500';
+        }
+
+        return `
+          <tr class="border-b border-slate-100 last:border-b-0">
+            <td class="py-2.5 px-2 text-xs font-bold text-slate-700">${z.zone} <span class="text-[10px] text-slate-400 font-normal">(${zA.weight}%)</span></td>
+            <td class="py-2.5 px-2 text-center text-xs font-extrabold text-slate-900">${valA}점</td>
+            <td class="py-2.5 px-2 text-center text-xs font-extrabold text-slate-900">${valB}점</td>
+            <td class="py-2.5 px-2 text-right text-xs ${diffColor}">${diffTxt}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const itemsCompareHtml = INSPECTION_SCHEMA.map(z => {
+        const rows = z.items.map(item => {
+          const gA = roomA.items[item.id]?.grade || '-';
+          const gB = roomB.items[item.id]?.grade || '-';
+          const pA = roomA.items[item.id]?.photos?.length || 0;
+          const pB = roomB.items[item.id]?.photos?.length || 0;
+          const isDiff = gA !== gB;
+          return `
+            <div class="flex items-center justify-between py-2 px-3 border-b border-slate-100 last:border-b-0 ${isDiff ? 'bg-amber-50/40' : ''}">
+              <span class="text-xs font-semibold text-slate-700">${item.name}</span>
+              <div class="flex items-center gap-3">
+                <span class="w-14 text-center py-0.5 rounded-md text-[11px] font-black border ${getGradeBadgeStyle(gA)}">${gA === 'none' ? '없음' : gA}${pA > 0 ? ` 📷${pA}` : ''}</span>
+                <span class="text-[10px] text-slate-300">vs</span>
+                <span class="w-14 text-center py-0.5 rounded-md text-[11px] font-black border ${getGradeBadgeStyle(gB)}">${gB === 'none' ? '없음' : gB}${pB > 0 ? ` 📷${pB}` : ''}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-slate-100 px-3.5 py-2 text-xs font-extrabold text-slate-700 flex justify-between">
+              <span>${z.icon} ${z.zone} 상세 항목</span>
+              <span>${rNoA}호 vs ${rNoB}호</span>
+            </div>
+            <div>${rows}</div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="bg-white rounded-2xl p-4 shadow-xs border border-slate-200">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold text-slate-500">종합 평가 요약</span>
+            ${diffBadge}
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-center">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div class="text-xs font-bold text-slate-500">${rNoA}호 종합</div>
+              <div class="text-xl font-black text-slate-900 mt-1">${scoreA}점</div>
+              <div class="mt-1 inline-block px-2.5 py-0.5 rounded-lg text-xs font-black border ${getGradeBadgeStyle(evA.totalGrade)}">${evA.totalGrade}등급</div>
+              <div class="text-[11px] text-slate-400 mt-1.5">D:${evA.countD}건 / E:${evA.countE}건 · 📷${evA.photoCount}장</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div class="text-xs font-bold text-slate-500">${rNoB}호 종합</div>
+              <div class="text-xl font-black text-slate-900 mt-1">${scoreB}점</div>
+              <div class="mt-1 inline-block px-2.5 py-0.5 rounded-lg text-xs font-black border ${getGradeBadgeStyle(evB.totalGrade)}">${evB.totalGrade}등급</div>
+              <div class="text-[11px] text-slate-400 mt-1.5">D:${evB.countD}건 / E:${evB.countE}건 · 📷${evB.photoCount}장</div>
+            </div>
+          </div>
+
+          <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b-2 border-slate-200 text-[11px] text-slate-400">
+                  <th class="py-2 px-2">점검 구역</th>
+                  <th class="py-2 px-2 text-center">${rNoA}호</th>
+                  <th class="py-2 px-2 text-center">${rNoB}호</th>
+                  <th class="py-2 px-2 text-right">차이(${rNoB}-${rNoA})</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${zoneCompareRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <h3 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider px-1">항목별 등급 차이 비교 (노란 배경: 등급 상이)</h3>
+          ${itemsCompareHtml}
+        </div>
+      `;
+    }
+
+    function renderSettingsView() {
+      let activeRooms = 0;
+      appState.roomOrder.forEach(rNo => {
+        if (evaluateRoom(appState.rooms[rNo]).status !== 'PENDING') activeRooms++;
+      });
+      document.getElementById('exportInspectedBadge').textContent = `${activeRooms}실`;
+
+      const wContainer = document.getElementById('weightSettingsContainer');
+      wContainer.innerHTML = INSPECTION_SCHEMA.map(z => {
+        const val = appState.weights[z.zone] ?? z.defaultWeight;
+        return `
+          <div class="flex items-center justify-between bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200">
+            <span class="text-sm font-bold text-slate-800">${z.icon} ${z.zone}</span>
+            <div class="flex items-center gap-1.5">
+              <input type="number" min="0" max="100" step="5"
+                data-zone="${z.zone}"
+                value="${val}"
+                oninput="updateWeightSumBadge()"
+                class="weight-input w-20 text-right font-extrabold text-sm bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+              <span class="text-xs font-bold text-slate-500">%</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      updateWeightSumBadge();
+    }
+
+    function updateWeightSumBadge() {
+      let sum = 0;
+      document.querySelectorAll('.weight-input').forEach(inp => {
+        sum += Number(inp.value || 0);
+      });
+      const badge = document.getElementById('weightSumBadge');
+      badge.textContent = `합계: ${sum}%`;
+      if (sum === 100) {
+        badge.className = 'text-xs font-extrabold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800';
+      } else {
+        badge.className = 'text-xs font-extrabold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700';
+      }
+    }
+
+    function saveWeights() {
+      let sum = 0;
+      const newWeights = {};
+      document.querySelectorAll('.weight-input').forEach(inp => {
+        const v = Number(inp.value || 0);
+        newWeights[inp.dataset.zone] = v;
+        sum += v;
+      });
+
+      if (sum !== 100) {
+        showToast(`가중치 합계가 100%가 되어야 합니다. (현재 ${sum}%)`, 'error');
+        return;
+      }
+
+      appState.weights = newWeights;
+      saveState();
+      showToast('가중치가 저장되었으며 397개 전체 객실 점수가 재계산되었습니다.', 'success');
+    }
+
+    function resetDefaultWeights() {
+      appState.weights = { '욕실': 25, '주방': 25, '거실': 20, '안방': 20, '작은방': 10 };
+      saveState();
+      renderSettingsView();
+      showToast('기본 가중치(25/25/20/20/10)로 복원되었습니다.', 'info');
+    }
+
+    function exportAllToCSV(mode) {
+      const headers = ['점검일자', '객실번호', '점검구분', '점검항목', '등급(A/B/C/D/E)', '사진첨부수', '체크포인트(세부 내용)', '비고 및 조치사항', '객실종합점수', '객실종합등급'];
+      const rows = [headers];
+
+      let exportedRooms = 0;
+      appState.roomOrder.forEach(rNo => {
+        const room = appState.rooms[rNo];
+        const ev = evaluateRoom(room);
+        if (mode === 'INSPECTED' && ev.status === 'PENDING') return;
+
+        exportedRooms++;
+        const scoreStr = ev.totalScore !== null ? ev.totalScore.toFixed(2) : '';
+        const gradeStr = ev.totalGrade !== '-' ? ev.totalGrade : '';
+
+        INSPECTION_SCHEMA.forEach(z => {
+          z.items.forEach(item => {
+            const entry = room.items[item.id] || { grade: '', note: '', photos: [] };
+            const pCnt = Array.isArray(entry.photos) ? entry.photos.length : 0;
+            rows.push([
+              room.date || '',
+              `${rNo}호`,
+              z.zone,
+              item.name,
+              entry.grade || '',
+              pCnt,
+              item.checkpoint,
+              entry.note || '',
+              scoreStr,
+              gradeStr
+            ]);
+          });
+        });
+      });
+
+      if (exportedRooms === 0) {
+        showToast('내보낼 점검 데이터가 없습니다.', 'info');
+        return;
+      }
+
+      downloadCSV(rows, `호텔객실점검_${mode === 'ALL' ? '전체397실' : '점검완료실'}_${getTodayStr()}.csv`);
+      showToast(`${exportedRooms}개 객실(${rows.length - 1}행) CSV 파일이 다운로드되었습니다.`, 'success');
+    }
+
+    function exportSummaryToCSV() {
+      const headers = ['객실번호', '층', '점검일자', '진행상태', '욕실점수', '주방점수', '거실점수', '안방점수', '작은방점수', '가중종합점수', '종합등급', 'D등급수', 'E등급수', '첨부사진수'];
+      const rows = [headers];
+
+      appState.roomOrder.forEach(rNo => {
+        const room = appState.rooms[rNo];
+        const ev = evaluateRoom(room);
+        const statusKr = ev.status === 'COMPLETED' ? '완료' : ev.status === 'IN_PROGRESS' ? '점검중' : '미점검';
+        const getZ = (zName) => ev.zoneResults[zName]?.avg !== null ? ev.zoneResults[zName].avg.toFixed(2) : '';
+
+        rows.push([
+          `${rNo}호`,
+          `${room.floor}층`,
+          room.date || '',
+          statusKr,
+          getZ('욕실'),
+          getZ('주방'),
+          getZ('거실'),
+          getZ('안방'),
+          getZ('작은방'),
+          ev.totalScore !== null ? ev.totalScore.toFixed(2) : '',
+          ev.totalGrade !== '-' ? ev.totalGrade : '',
+          ev.countD,
+          ev.countE,
+          ev.photoCount
+        ]);
+      });
+
+      downloadCSV(rows, `호텔397실_종합등급요약표_${getTodayStr()}.csv`);
+      showToast('397실 종합등급 요약표 CSV 파일이 다운로드되었습니다.', 'success');
+    }
+
+    function downloadCSV(rows, filename) {
+      const csvContent = '\uFEFF' + rows.map(row =>
+        row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')
+      ).join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function handleFileImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonRows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+          let importedCount = 0;
+          jsonRows.forEach(row => {
+            const rawRoom = String(row['객실번호'] || row['호수'] || '').replace(/[^0-9]/g, '');
+            const zone = String(row['점검구분'] || row['구역'] || '').trim();
+            const itemName = String(row['점검항목'] || row['항목'] || '').trim();
+            const grade = String(row['등급(A/B/C/D/E)'] || row['등급'] || '').trim();
+            const note = String(row['비고 및 조치사항'] || row['비고'] || '').trim();
+            const date = String(row['점검일자'] || '').trim();
+
+            if (rawRoom && zone && itemName) {
+              if (!appState.rooms[rawRoom]) {
+                appState.rooms[rawRoom] = {
+                  roomNo: rawRoom,
+                  floor: Math.floor(Number(rawRoom) / 100) || 1,
+                  date: date || getTodayStr(),
+                  items: {}
+                };
+                if (!appState.roomOrder.includes(rawRoom)) {
+                  appState.roomOrder.push(rawRoom);
+                }
+              }
+              if (date) appState.rooms[rawRoom].date = date;
+
+              const itemId = `${zone}_${itemName}`;
+              const validGrades = ['A', 'B', 'C', 'D', 'E', 'none'];
+              const normalizedGrade = validGrades.includes(grade) ? grade : (grade.toLowerCase() === 'none' ? 'none' : '');
+              const existingPhotos = appState.rooms[rawRoom].items[itemId]?.photos || [];
+
+              appState.rooms[rawRoom].items[itemId] = {
+                grade: normalizedGrade,
+                note,
+                photos: existingPhotos
+              };
+              importedCount++;
+            }
+          });
+
+          if (importedCount > 0) {
+            saveState();
+            renderDashboard();
+            showToast(`총 ${importedCount}개 점검 항목 데이터를 성공적으로 불러왔습니다!`, 'success');
+          } else {
+            showToast('인식 가능한 점검 데이터 행이 없습니다. 컬럼명을 확인해 주세요.', 'error');
+          }
+        } catch (err) {
+          console.error(err);
+          showToast('파일을 읽는 중 오류가 발생했습니다.', 'error');
+        }
+        event.target.value = '';
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function confirmFactoryReset() {
+      showConfirmModal(
+        '전체 데이터 초기화',
+        '입력된 점검 데이터와 첨부 사진이 모두 삭제되고 397개 맞춤 객실이 미점검 상태로 초기화됩니다. 계속하시겠습니까?',
+        () => {
+          localStorage.removeItem(STORAGE_KEY);
+          const initial = createInitialRoomsData();
+          appState.rooms = initial.rooms;
+          appState.roomOrder = initial.roomOrder;
+          appState.currentRoomNo = initial.roomOrder[0];
+          appState.weights = { '욕실': 25, '주방': 25, '거실': 20, '안방': 20, '작은방': 10 };
+          saveState();
+          renderSettingsView();
+          showToast('397실이 빈 상태로 초기화되었습니다.', 'success');
+        }
+      );
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bg = type === 'success' ? 'bg-slate-900 text-emerald-400 border-emerald-500/40'
+        : type === 'error' ? 'bg-rose-600 text-white border-rose-400'
+        : 'bg-slate-800 text-white border-slate-600';
+
+      toast.className = `${bg} border px-4 py-3 rounded-2xl shadow-xl text-xs font-bold text-center transition-all duration-300 transform translate-y-0 opacity-100`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 2600);
+    }
+
+    function showConfirmModal(title, message, onConfirm) {
+      const modal = document.getElementById('customModal');
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalMessage').textContent = message;
+      document.getElementById('modalExtraInput').classList.add('hidden');
+      
+      const confirmBtn = document.getElementById('modalConfirmBtn');
+      confirmBtn.classList.remove('hidden');
+      confirmBtn.onclick = () => {
+        closeModal();
+        onConfirm();
+      };
+      document.getElementById('modalCancelBtn').onclick = closeModal;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('customModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function getTodayStr() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadState();
+      initFloorDropdown();
+      renderDashboard();
+    });
+  </script>
+</body>
+</html>
